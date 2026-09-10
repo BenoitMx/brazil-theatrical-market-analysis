@@ -1,0 +1,89 @@
+CREATE OR REPLACE TABLE `Ancine.screen_size_admissions_w1_w4` AS
+
+WITH films AS (
+  SELECT
+    Title,
+    release_date_clean,
+
+    MAX(IF(exploitation_week = 1, screens_at_release, NULL)) AS screens_w1,
+    MAX(IF(exploitation_week = 2, screens_at_release, NULL)) AS screens_w2,
+    MAX(IF(exploitation_week = 3, screens_at_release, NULL)) AS screens_w3,
+    MAX(IF(exploitation_week = 4, screens_at_release, NULL)) AS screens_w4,
+
+    MAX(IF(exploitation_week = 1, week_admissions, NULL)) AS admissions_w1,
+    MAX(IF(exploitation_week = 2, week_admissions, NULL)) AS admissions_w2,
+    MAX(IF(exploitation_week = 3, week_admissions, NULL)) AS admissions_w3,
+    MAX(IF(exploitation_week = 4, week_admissions, NULL)) AS admissions_w4
+
+  FROM `Ancine.true_first_week`
+
+  WHERE exploitation_week BETWEEN 1 AND 4
+
+  GROUP BY
+    Title,
+    release_date_clean
+),
+
+screen_groups AS (
+  SELECT
+    *,
+# Group by rank of number of screens on release
+    CASE
+      WHEN screens_w1 BETWEEN 1 AND 99 THEN '1-99'
+      WHEN screens_w1 BETWEEN 100 AND 299 THEN '100-299'
+      WHEN screens_w1 BETWEEN 300 AND 599 THEN '300-599'
+      WHEN screens_w1 BETWEEN 600 AND 999 THEN '600-999'
+      WHEN screens_w1 BETWEEN 1000 AND 1499 THEN '1000-1499'
+      WHEN screens_w1 >= 1500 THEN '1500+'
+    END AS screen_group,
+
+    CASE
+      WHEN screens_w1 BETWEEN 1 AND 99 THEN 1
+      WHEN screens_w1 BETWEEN 100 AND 299 THEN 2
+      WHEN screens_w1 BETWEEN 300 AND 599 THEN 3
+      WHEN screens_w1 BETWEEN 600 AND 999 THEN 4
+      WHEN screens_w1 BETWEEN 1000 AND 1499 THEN 5
+      WHEN screens_w1 >= 1500 THEN 6
+    END AS screen_group_order,
+
+    SAFE_DIVIDE(admissions_w1, screens_w1) AS admissions_per_screen_w1,
+    SAFE_DIVIDE(admissions_w2, screens_w2) AS admissions_per_screen_w2,
+    SAFE_DIVIDE(admissions_w3, screens_w3) AS admissions_per_screen_w3,
+    SAFE_DIVIDE(admissions_w4, screens_w4) AS admissions_per_screen_w4
+
+  FROM films
+
+  WHERE screens_w1 > 0
+    AND screens_w2 > 0
+    AND screens_w3 > 0
+    AND screens_w4 > 0
+    AND admissions_w1 IS NOT NULL
+    AND admissions_w2 IS NOT NULL
+    AND admissions_w3 IS NOT NULL
+    AND admissions_w4 IS NOT NULL
+)
+
+SELECT
+  screen_group,
+  screen_group_order,
+
+  COUNT(*) AS number_of_films,
+
+  ROUND(AVG(admissions_w1), 0) AS avg_admissions_w1,
+  ROUND(AVG(admissions_w2), 0) AS avg_admissions_w2,
+  ROUND(AVG(admissions_w3), 0) AS avg_admissions_w3,
+  ROUND(AVG(admissions_w4), 0) AS avg_admissions_w4,
+
+  ROUND(AVG(admissions_per_screen_w1), 0) AS avg_admissions_per_screen_w1,
+  ROUND(AVG(admissions_per_screen_w2), 0) AS avg_admissions_per_screen_w2,
+  ROUND(AVG(admissions_per_screen_w3), 0) AS avg_admissions_per_screen_w3,
+  ROUND(AVG(admissions_per_screen_w4), 0) AS avg_admissions_per_screen_w4
+
+FROM screen_groups
+
+GROUP BY
+  screen_group,
+  screen_group_order
+
+ORDER BY
+  screen_group_order;
