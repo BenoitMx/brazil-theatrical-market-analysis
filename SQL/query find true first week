@@ -1,0 +1,162 @@
+CREATE OR REPLACE TABLE `Ancine.true_first_week` AS
+WITH clean_data AS (
+  SELECT
+    *,
+    # Extract number from semana nb
+    SAFE_CAST(
+      REGEXP_EXTRACT(`Week #`, r'(\d+)')
+      AS INT64
+    ) AS week_number,
+
+    # Convert date
+    SAFE.PARSE_DATE(
+      '%d/%m/%Y',
+      release_date
+    ) AS release_date_clean
+
+  FROM `Ancine.Weeks`
+),
+
+cinema_weeks AS (
+  SELECT
+    *,
+
+    CASE
+      # Before 2014 cinema week starts on Friday
+      WHEN `Release year` < 2014 THEN
+        DATE_ADD(
+          DATE_ADD(
+            DATE(`Release year`, 1, 1),
+            INTERVAL MOD(
+              6
+              - EXTRACT(
+                  DAYOFWEEK
+                  FROM DATE(`Release year`, 1, 1)
+                )
+              + 7,
+              7
+            ) DAY
+          ),
+          INTERVAL (week_number - 1) * 7 DAY
+        )
+
+      # Before 2014 week 10 cinema week starts on Friday
+      WHEN `Release year` = 2014
+        AND week_number <= 10 THEN
+        DATE_ADD(
+          DATE '2014-01-03',
+          INTERVAL (week_number - 1) * 7 DAY
+        )
+
+      # From 2014 week 11 cinema week starts on Thurday
+      WHEN `Release year` = 2014
+        AND week_number >= 11 THEN
+        DATE_ADD(
+          DATE '2014-03-13',
+          INTERVAL (week_number - 11) * 7 DAY
+        )
+
+      # Since 2015: cinema week starts on Thursday
+      WHEN `Release year` >= 2015 THEN
+        DATE_ADD(
+          DATE_ADD(
+            DATE(`Release year`, 1, 1),
+            INTERVAL MOD(
+              5
+              - EXTRACT(
+                  DAYOFWEEK
+                  FROM DATE(`Release year`, 1, 1)
+                )
+              + 7,
+              7
+            ) DAY
+          ),
+          INTERVAL (week_number - 1) * 7 DAY
+        )
+    END AS cinema_week_start
+  FROM clean_data
+  WHERE week_number IS NOT NULL
+    AND release_date_clean IS NOT NULL
+),
+release_weeks AS (
+
+  SELECT
+    *,
+
+    CASE
+
+      # Before the March 2014, find previous Friday
+      WHEN release_date_clean < DATE '2014-03-13' THEN
+        DATE_SUB(
+          release_date_clean,
+          INTERVAL MOD(
+            EXTRACT(DAYOFWEEK FROM release_date_clean) - 6 + 7,
+            7
+          ) DAY
+        )
+
+      # From 13 March 2014, find previous Thursday
+      ELSE
+        DATE_SUB(
+          release_date_clean,
+          INTERVAL MOD(
+            EXTRACT(DAYOFWEEK FROM release_date_clean) - 5 + 7,
+            7
+          ) DAY
+        )
+    END AS official_release_week_start
+  FROM cinema_weeks
+),
+
+classified AS (
+  SELECT
+    *,
+    # End of each observed cinema week
+    CASE
+      # week 10 of 2014
+      WHEN `Release year` = 2014
+        AND week_number = 10
+      THEN DATE '2014-03-12'
+
+      ELSE DATE_ADD(
+        cinema_week_start,
+        INTERVAL 6 DAY
+      )
+
+    END AS cinema_week_end,
+
+    # Week 0 = premieres
+    # Week 1 = official release week
+    # Week 2,3,4 = following  weeks
+    CASE
+
+      WHEN cinema_week_start < official_release_week_start
+      THEN 0
+
+      ELSE
+        CAST(
+          SAFE_DIVIDE(
+            DATE_DIFF(
+              cinema_week_start,
+              official_release_week_start,
+              DAY
+            ),
+            7
+          ) + 1
+          AS INT64
+        )
+
+    END AS exploitation_week
+
+  FROM release_weeks
+)
+
+SELECT
+  *
+
+FROM classified
+
+ORDER BY
+  title,
+  `Release year`,
+  week_number;
