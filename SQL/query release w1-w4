@@ -1,0 +1,90 @@
+CREATE OR REPLACE TABLE `Ancine.films_w1_w4` AS
+
+WITH weekly_data AS (
+  SELECT
+    title,
+    release_date_clean,
+    genre,
+    production_countries,
+    nationality,
+    distributor,
+    distributor_origin,
+    exploitation_week,
+    screens_at_release,
+    week_incomes
+  FROM `Ancine.true_first_week`
+# only keep movies with 4 weeks exhibition
+  WHERE exploitation_week BETWEEN 1 AND 4
+),
+
+pivoted AS (
+
+  SELECT
+    title,
+    release_date_clean,
+    genre,
+    production_countries,
+    nationality,
+    distributor,
+    distributor_origin,
+
+    # screens
+    MAX(IF(exploitation_week = 1, screens_at_release, NULL)) AS screens_w1,
+    MAX(IF(exploitation_week = 2, screens_at_release, NULL)) AS screens_w2,
+    MAX(IF(exploitation_week = 3, screens_at_release, NULL)) AS screens_w3,
+    MAX(IF(exploitation_week = 4, screens_at_release, NULL)) AS screens_w4,
+
+    #revenues
+    MAX(IF(exploitation_week = 1, week_incomes, NULL)) AS revenue_w1,
+    MAX(IF(exploitation_week = 2, week_incomes, NULL)) AS revenue_w2,
+    MAX(IF(exploitation_week = 3, week_incomes, NULL)) AS revenue_w3,
+    MAX(IF(exploitation_week = 4, week_incomes, NULL)) AS revenue_w4
+
+  FROM weekly_data
+
+  GROUP BY
+    title,
+    release_date_clean,
+    genre,
+    production_countries,
+    nationality,
+    distributor,
+    distributor_origin
+)
+
+SELECT
+  *,
+
+  # revenue per screen
+  ROUND(SAFE_DIVIDE(revenue_w1, screens_w1),0) AS revenue_per_screen_w1,
+  ROUND(SAFE_DIVIDE(revenue_w2, screens_w2),0) AS revenue_per_screen_w2,
+  ROUND(SAFE_DIVIDE(revenue_w3, screens_w3),0) AS revenue_per_screen_w3,
+  ROUND(SAFE_DIVIDE(revenue_w4, screens_w4),0) AS revenue_per_screen_w4,
+
+  # Week retention (Positive = more screens - Negative = less screens )
+  100 * SAFE_DIVIDE(
+    screens_w2 - screens_w1,
+    screens_w1
+  ) AS week_retention_w2_pct,
+
+  100 * SAFE_DIVIDE(
+    screens_w3 - screens_w2,
+    screens_w2
+  ) AS week_retention_w3_pct,
+
+  100 * SAFE_DIVIDE(
+    screens_w4 - screens_w3,
+    screens_w3
+  ) AS week_retention_w4_pct
+
+FROM pivoted
+
+# Keep only films with 4 weeks exhibition
+WHERE screens_w1 IS NOT NULL
+  AND screens_w2 IS NOT NULL
+  AND screens_w3 IS NOT NULL
+  AND screens_w4 IS NOT NULL
+
+ORDER BY
+  release_date_clean,
+  title;
