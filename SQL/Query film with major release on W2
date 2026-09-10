@@ -1,0 +1,89 @@
+CREATE OR REPLACE TABLE `Ancine.films_with_major_releases_w2` AS
+
+#Group Week 1 & 2 by title
+WITH films AS (
+  SELECT
+    Title,
+    release_date_clean,
+    ANY_VALUE(Genre) AS genre,
+    ANY_VALUE(production_countries) AS production_countries,
+    ANY_VALUE(nationality) AS nationality,
+    ANY_VALUE(distributor) AS distributor,
+    ANY_VALUE(distributor_origin) AS distributor_origin,
+
+    MAX(IF(exploitation_week = 1, cinema_week_start, NULL)) AS week_w1_start,
+    MAX(IF(exploitation_week = 2, cinema_week_start, NULL)) AS week_w2_start,
+
+    MAX(IF(exploitation_week = 1, screens_at_release, NULL)) AS screens_w1,
+    MAX(IF(exploitation_week = 2, screens_at_release, NULL)) AS screens_w2,
+
+    MAX(IF(exploitation_week = 1, week_admissions, NULL)) AS admissions_w1,
+    MAX(IF(exploitation_week = 1, week_incomes, NULL)) AS revenue_w1
+
+  FROM `Ancine.true_first_week`
+
+  GROUP BY
+    Title,
+    release_date_clean
+),
+
+major_releases AS (
+  SELECT DISTINCT
+    Title,
+    release_date_clean,
+    cinema_week_start AS release_week_start
+
+  FROM `Ancine.true_first_week`
+
+# Identify major releases
+  WHERE exploitation_week = 1
+    AND REGEXP_CONTAINS(
+      LOWER(distributor),
+      r'disney|buena vista|universal|warner|paramount|fox|20th century|twentieth century'
+    )
+),
+#Count major releases
+major_counts AS (
+  SELECT
+    release_week_start,
+    COUNT(*) AS major_releases_w2
+
+  FROM major_releases
+
+  GROUP BY release_week_start
+),
+
+final_data AS (
+  SELECT
+    f.*,
+    COALESCE(m.major_releases_w2, 0) AS major_releases_w2,
+    SAFE_DIVIDE(
+      admissions_w1,
+      screens_w1
+    ) AS admissions_per_screen_w1,
+    SAFE_DIVIDE(
+      revenue_w1,
+      screens_w1
+    ) AS revenue_per_screen_w1,
+    100 * SAFE_DIVIDE(
+      screens_w2 - screens_w1,
+      screens_w1
+    ) AS screen_retention_w2_pct
+  FROM films f
+
+  LEFT JOIN major_counts m
+    ON f.week_w2_start = m.release_week_start
+
+  WHERE f.week_w2_start IS NOT NULL
+    AND f.screens_w1 > 0
+    AND f.screens_w2 IS NOT NULL
+)
+
+SELECT *
+FROM final_data
+#Delete extremes
+WHERE screen_retention_w2_pct BETWEEN -100 AND 150
+
+ORDER BY
+  release_date_clean,
+  Title;
