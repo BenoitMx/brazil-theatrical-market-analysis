@@ -76,7 +76,7 @@ The clustering analysis identifies four distinct release profiles:
 Films opening on similar numbers of screens can follow substantially different
 trajectories during their first four weeks.
 
-<img width="982" height="738" alt="Capture d’écran 2026-09-11 à 00 20 19" src="https://github.com/user-attachments/assets/5217f13d-a9b6-481c-b097-91eb20c3e2e1" />
+<img width="1192" height="892" alt="Four Major Release Categories in the Brasilian theatrical Market" src="https://github.com/user-attachments/assets/973bb6e7-ffcc-4c6b-b27e-bd9aaf39e1c0" />
 
 ### 2. Competitive pressure is associated with screen retention
 
